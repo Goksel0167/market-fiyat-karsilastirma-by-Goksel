@@ -1,0 +1,204 @@
+{
+  "fisler": [
+    {
+      "id": 1,
+      "market": "Migros",
+      "tarih": "10.02.2026",
+      "urunler": [
+        {
+          "ad": "Süt",
+          "miktar": 2.0,
+          "birim": "lt",
+          "fiyat": 48.0,
+          "birim_fiyat": 24.0
+        },
+        {
+          "ad": "Ekmek",
+          "miktar": 3.0,
+          "birim": "adet",
+          "fiyat": 18.0,
+          "birim_fiyat": 6.0
+        },
+        {
+          "ad": "Yumurta",
+          "miktar": 1.0,
+          "birim": "adet",
+          "fiyat": 65.0,
+          "birim_fiyat": 65.0
+        }
+      ],
+      "toplam": 131.0,
+      "kayit_zamani": "2026-02-10T14:30:00"
+    },
+    {
+      "id": 2,
+      "market": "A101",
+      "tarih": "11.02.2026",
+      "urunler": [
+        {
+          "ad": "Süt",
+          "miktar": 2.0,
+          "birim": "lt",
+          "fiyat": 45.0,
+          "birim_fiyat": 22.5
+        },
+        {
+          "ad": "Ekmek",
+          "miktar": 2.0,
+          "birim": "adet",
+          "fiyat": 12.0,
+          "birim_fiyat": 6.0
+        },
+        {
+          "ad": "Domates",
+          "miktar": 1.5,
+          "birim": "kg",
+          "fiyat": 45.0,
+          "birim_fiyat": 30.0
+        }
+      ],
+      "toplam": 102.0,
+      "kayit_zamani": "2026-02-11T10:15:00"
+    },
+    {
+      "id": 3,
+      "market": "ŞOK",
+      "tarih": "13.02.2026",
+      "urunler": [
+        {
+          "ad": "Süt",
+          "miktar": 1.0,
+          "birim": "lt",
+          "fiyat": 23.9,
+          "birim_fiyat": 23.9
+        },
+        {
+          "ad": "Peynir",
+          "miktar": 0.5,
+          "birim": "kg",
+          "fiyat": 185.0,
+          "birim_fiyat": 370.0
+        },
+        {
+          "ad": "Yumurta",
+          "miktar": 1.0,
+          "birim": "adet",
+          "fiyat": 62.0,
+          "birim_fiyat": 62.0
+        }
+      ],
+      "toplam": 270.9,
+      "kayit_zamani": "2026-02-13T16:45:00"
+    }
+  ],
+  "urunler": {
+    "Süt": {
+      "Migros": [
+        {
+          "tarih": "10.02.2026",
+          "fiyat": 48.0,
+          "birim_fiyat": 24.0,
+          "miktar": 2.0,
+          "birim": "lt"
+        }
+      ],
+      "A101": [
+        {
+          "tarih": "11.02.2026",
+          "fiyat": 45.0,
+          "birim_fiyat": 22.5,
+          "miktar": 2.0,
+          "birim": "lt"
+        }
+      ],
+      "ŞOK": [
+        {
+          "tarih": "13.02.2026",
+          "fiyat": 23.9,
+          "birim_fiyat": 23.9,
+          "miktar": 1.0,
+          "birim": "lt"
+        }
+      ]
+    },
+    "Ekmek": {
+      "Migros": [
+        {
+          "tarih": "10.02.2026",
+          "fiyat": 18.0,
+          "birim_fiyat": 6.0,
+          "miktar": 3.0,
+          "birim": "adet"
+        }
+      ],
+      "A101": [
+        {
+          "tarih": "11.02.2026",
+          "fiyat": 12.0,
+          "birim_fiyat": 6.0,
+          "miktar": 2.0,
+          "birim": "adet"
+        }
+      ]
+    },
+    "Yumurta": {
+      "Migros": [
+        {
+          "tarih": "10.02.2026",
+          "fiyat": 65.0,
+          "birim_fiyat": 65.0,
+          "miktar": 1.0,
+          "birim": "adet"
+        }
+      ],
+      "ŞOK": [
+        {
+          "tarih": "13.02.2026",
+          "fiyat": 62.0,
+          "birim_fiyat": 62.0,
+          "miktar": 1.0,
+          "birim": "adet"
+        }
+      ]
+    },
+    "Domates": {
+      "A101": [
+        {
+          "tarih": "11.02.2026",
+          "fiyat": 45.0,
+          "birim_fiyat": 30.0,
+          "miktar": 1.5,
+          "birim": "kg"
+        }
+      ]
+    },
+    "Peynir": {
+      "ŞOK": [
+        {
+          "tarih": "13.02.2026",
+          "fiyat": 185.0,
+          "birim_fiyat": 370.0,
+          "miktar": 0.5,
+          "birim": "kg"
+        }
+      ]
+    }
+  },
+  "marketler": {
+    "Migros": {
+      "toplam_alisveris": 3,
+      "toplam_harcama": 131.0,
+      "urun_sayisi": 3
+    },
+    "A101": {
+      "toplam_alisveris": 3,
+      "toplam_harcama": 102.0,
+      "urun_sayisi": 3
+    },
+    "ŞOK": {
+      "toplam_alisveris": 3,
+      "toplam_harcama": 270.9,
+      "urun_sayisi": 3
+    }
+  }
+}
