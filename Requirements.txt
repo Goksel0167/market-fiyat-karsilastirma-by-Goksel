@@ -1,0 +1,9 @@
+# Market Analiz Sistemi - Requirements
+# Bu program sadece Python standart kütüphanelerini kullanır
+# Python 3.6+ gereklidir
+
+# Opsiyonel: Gelişmiş özellikler için
+# pandas>=1.3.0  # CSV analizi için
+# matplotlib>=3.3.0  # Grafik görselleştirme için
+# openpyxl>=3.0.0  # Excel desteği için
+
