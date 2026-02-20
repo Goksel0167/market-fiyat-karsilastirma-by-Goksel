@@ -37,6 +37,15 @@ def urun_guncelle(veriler, market, tarih, urunler):
         veriler["marketler"][market]["toplam_harcama"] += u["fiyat"]
         veriler["marketler"][market]["urun_sayisi"] += 1
 
+def fis_sil(veriler, fis_id):
+    veriler["fisler"] = [f for f in veriler["fisler"] if f["id"] != fis_id]
+    veriler["urunler"] = {}
+    veriler["marketler"] = {}
+    for f in veriler["fisler"]:
+        urun_guncelle(veriler, f["market"], f["tarih"], f["urunler"])
+    verileri_kaydet(veriler)
+    return veriler
+
 if "veriler" not in st.session_state:
     st.session_state.veriler = verileri_yukle()
 if "sepet" not in st.session_state:
@@ -51,8 +60,25 @@ with st.sidebar:
         "\U0001f4b0 Fiyat Karsilastir",
         "\U0001f4ca Harcama Analizi",
         "\U0001f4cb Fisleri Listele",
+        "\U0001f5d1\ufe0f Fis Sil",
         "\U0001f4be Verileri Disa Aktar",
     ], label_visibility="collapsed")
+    st.markdown("---")
+    st.caption("\U0001f4e4 Varolan JSON verinizi yukleyin (50MB+)")
+    uploaded = st.file_uploader("JSON yukle", type=["json"], label_visibility="collapsed")
+    if uploaded is not None:
+        try:
+            boyut_mb = uploaded.size / (1024 * 1024)
+            icerik = json.load(uploaded)
+            if "fisler" in icerik and "urunler" in icerik:
+                verileri_kaydet(icerik)
+                st.session_state.veriler = icerik
+                st.success(f"Yuklendi! {len(icerik['fisler'])} fis ({boyut_mb:.1f} MB)")
+                st.rerun()
+            else:
+                st.error("Gecersiz JSON formati!")
+        except Exception as e:
+            st.error(f"Hata: {e}")
     st.markdown("---")
     v = st.session_state.veriler
     st.metric("Toplam Fis", len(v["fisler"]))
@@ -274,9 +300,40 @@ elif sayfa == "\U0001f4cb Fisleri Listele":
         goster = veriler["fisler"] if filtre == "Tumu" else [f for f in veriler["fisler"] if f["market"]==filtre]
         for fis in reversed(goster):
             with st.expander(f"Fis #{fis['id']} — {fis['market']} — {fis['tarih']} — {fis['toplam']:.2f} TL"):
-                df_f = pd.DataFrame(fis["urunler"])[["ad","miktar","birim","fiyat","birim_fiyat"]]
+                df_f = pd.DataFrame(fis["urunler"])[[ "ad","miktar","birim","fiyat","birim_fiyat"]]
                 df_f.columns = ["Urun","Miktar","Birim","Fiyat (TL)","B.Fiyat (TL)"]
                 st.dataframe(df_f, use_container_width=True, hide_index=True)
+
+# ─── FİŞ SİL ─────────────────────────────────────────────────────────────────
+elif sayfa == "\U0001f5d1\ufe0f Fis Sil":
+    st.title("\U0001f5d1\ufe0f Fis Sil")
+    st.markdown("---")
+    if not veriler["fisler"]:
+        st.warning("Henuz fis yok.")
+    else:
+        st.info(f"Toplam {len(veriler['fisler'])} fis kayitli.")
+        # Tablo olarak listele
+        df_liste = pd.DataFrame([{
+            "ID": f["id"],
+            "Market": f["market"],
+            "Tarih": f["tarih"],
+            "Urun Sayisi": len(f["urunler"]),
+            "Toplam (TL)": f["toplam"]
+        } for f in reversed(veriler["fisler"])]).reset_index(drop=True)
+        st.dataframe(df_liste, use_container_width=True, hide_index=True)
+        st.markdown("---")
+        st.subheader("Fis Sec ve Sil")
+        fis_secenekleri = {
+            f"#{f['id']} - {f['market']} - {f['tarih']} - {f['toplam']:.2f} TL": f["id"]
+            for f in reversed(veriler["fisler"])
+        }
+        secilen_label = st.selectbox("Silmek istediginiz fisi secin:", list(fis_secenekleri.keys()))
+        secilen_id = fis_secenekleri[secilen_label]
+        st.warning(f"**{secilen_label}** silinecek. Bu islem geri alinamaz!")
+        if st.button("\U0001f5d1\ufe0f Fisi Kalici Olarak Sil", type="primary", use_container_width=True):
+            st.session_state.veriler = fis_sil(veriler, secilen_id)
+            st.success("Fis basariyla silindi!")
+            st.rerun()
 
 # ─── VERİLERİ DIŞA AKTAR ─────────────────────────────────────────────────────
 elif sayfa == "\U0001f4be Verileri Disa Aktar":
