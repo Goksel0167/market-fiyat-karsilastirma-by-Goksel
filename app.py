@@ -8,7 +8,26 @@ from datetime import datetime
 from collections import defaultdict
 
 st.set_page_config(page_title="Market Analiz", page_icon="\U0001f6d2", layout="wide",
-                   initial_sidebar_state="expanded")
+                   initial_sidebar_state="collapsed")
+
+# Mobile responsive CSS
+st.markdown("""
+<style>
+/* Sidebar toggle butonu her zaman görünür */
+[data-testid="collapsedControl"] { display: flex !important; }
+/* Metrik kutular mobile'da wrap */
+[data-testid="metric-container"] { min-width: 80px; }
+/* Dataframe mobile scroll */
+[data-testid="stDataFrame"] { overflow-x: auto; }
+/* Butonlar mobile'da tam genişlik */
+@media (max-width: 640px) {
+    [data-testid="stHorizontalBlock"] > div { min-width: 0 !important; }
+    .stButton button { width: 100% !important; }
+    h1 { font-size: 1.4rem !important; }
+    h2 { font-size: 1.1rem !important; }
+}
+</style>
+""", unsafe_allow_html=True)
 VERI_DOSYASI = "market_verileri.json"
 
 def verileri_yukle():
@@ -133,10 +152,10 @@ elif sayfa == "\U0001f4dd Yeni Fis Ekle":
         st.subheader("Urun Ekle")
         with st.form("urun_form", clear_on_submit=True):
             urun_adi = st.text_input("Urun Adi")
-            ca, cb, cc = st.columns(3)
+            ca, cb = st.columns(2)
             miktar = ca.number_input("Miktar", min_value=0.01, value=1.0, step=0.1)
             fiyat  = cb.number_input("Fiyat (TL)", min_value=0.01, value=1.0, step=0.5)
-            birim  = cc.selectbox("Birim", ["adet", "kg", "lt", "gr", "ml"])
+            birim  = st.selectbox("Birim", ["adet", "kg", "lt", "gr", "ml"])
             if st.form_submit_button("+ Sepete Ekle", use_container_width=True):
                 if not urun_adi.strip():
                     st.error("Urun adi bos olamaz!")
@@ -153,27 +172,24 @@ elif sayfa == "\U0001f4dd Yeni Fis Ekle":
             st.info("Sepet bos.")
         else:
             toplam = sum(u["fiyat"] for u in st.session_state.sepet)
-            # Her ürünü ayrı satır olarak göster, yanında sil butonu
-            header = st.columns([3, 1.2, 1, 1.2, 0.7])
-            header[0].markdown("**Urun**")
-            header[1].markdown("**Miktar**")
-            header[2].markdown("**Birim**")
-            header[3].markdown("**Fiyat (TL)**")
-            header[4].markdown("**Sil**")
-            st.markdown("<hr style='margin:4px 0'>", unsafe_allow_html=True)
+            # Her ürünü ayrı satır — 2 kolonlu (bilgi | sil), mobile uyumlu
             sil_index = None
             for i, u in enumerate(st.session_state.sepet):
-                row = st.columns([3, 1.2, 1, 1.2, 0.7])
-                row[0].write(u["ad"])
-                row[1].write(f"{u['miktar']} ")
-                row[2].write(u["birim"])
-                row[3].write(f"{u['fiyat']:.2f}")
-                if row[4].button("\u274c", key=f"sil_{i}", help=f"{u['ad']} kaldir"):
-                    sil_index = i
+                col_info, col_btn = st.columns([5, 1])
+                with col_info:
+                    st.markdown(
+                        f"**{u['ad']}** &nbsp; `{u['miktar']} {u['birim']}` &nbsp; "
+                        f"**{u['fiyat']:.2f} TL**",
+                        unsafe_allow_html=True
+                    )
+                with col_btn:
+                    if st.button("\u274c", key=f"sil_{i}", help=f"{u['ad']} kaldir",
+                                 use_container_width=True):
+                        sil_index = i
+                st.divider()
             if sil_index is not None:
                 st.session_state.sepet.pop(sil_index)
                 st.rerun()
-            st.markdown("<hr style='margin:4px 0'>", unsafe_allow_html=True)
             st.metric("\U0001f4b0 Toplam", f"{toplam:.2f} TL")
             sc, kc = st.columns(2)
             if sc.button("Sepeti Temizle", use_container_width=True):
