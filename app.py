@@ -153,9 +153,27 @@ elif sayfa == "\U0001f4dd Yeni Fis Ekle":
             st.info("Sepet bos.")
         else:
             toplam = sum(u["fiyat"] for u in st.session_state.sepet)
-            df_s = pd.DataFrame(st.session_state.sepet)[["ad","miktar","birim","fiyat","birim_fiyat"]]
-            df_s.columns = ["Urun","Miktar","Birim","Fiyat (TL)","Birim Fiyat (TL)"]
-            st.dataframe(df_s, use_container_width=True, hide_index=True)
+            # Her ürünü ayrı satır olarak göster, yanında sil butonu
+            header = st.columns([3, 1.2, 1, 1.2, 0.7])
+            header[0].markdown("**Urun**")
+            header[1].markdown("**Miktar**")
+            header[2].markdown("**Birim**")
+            header[3].markdown("**Fiyat (TL)**")
+            header[4].markdown("**Sil**")
+            st.markdown("<hr style='margin:4px 0'>", unsafe_allow_html=True)
+            sil_index = None
+            for i, u in enumerate(st.session_state.sepet):
+                row = st.columns([3, 1.2, 1, 1.2, 0.7])
+                row[0].write(u["ad"])
+                row[1].write(f"{u['miktar']} ")
+                row[2].write(u["birim"])
+                row[3].write(f"{u['fiyat']:.2f}")
+                if row[4].button("\u274c", key=f"sil_{i}", help=f"{u['ad']} kaldir"):
+                    sil_index = i
+            if sil_index is not None:
+                st.session_state.sepet.pop(sil_index)
+                st.rerun()
+            st.markdown("<hr style='margin:4px 0'>", unsafe_allow_html=True)
             st.metric("\U0001f4b0 Toplam", f"{toplam:.2f} TL")
             sc, kc = st.columns(2)
             if sc.button("Sepeti Temizle", use_container_width=True):
