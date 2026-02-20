@@ -1,426 +1,532 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Market Fiyat Karşılaştırma ve Harcama Analizi Programı
-Aileler için kapsamlı market alışverişi yönetim sistemi
+Market Fiyat Kar┼ş─▒la┼şt─▒rma ve Harcama Analizi - Streamlit Aray├╝z├╝
 """
 
 import json
 import os
+import statistics
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+import streamlit as st
 from datetime import datetime
 from collections import defaultdict
-import statistics
 
-class MarketAnaliz:
-    def __init__(self, veri_dosyasi="market_verileri.json"):
-        self.veri_dosyasi = veri_dosyasi
-        self.veriler = self.verileri_yukle()
-        
-    def verileri_yukle(self):
-        """Kaydedilmiş verileri yükle"""
-        if os.path.exists(self.veri_dosyasi):
-            try:
-                with open(self.veri_dosyasi, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-            except:
-                return {"fisler": [], "urunler": {}, "marketler": {}}
-        return {"fisler": [], "urunler": {}, "marketler": {}}
-    
-    def verileri_kaydet(self):
-        """Verileri dosyaya kaydet"""
-        with open(self.veri_dosyasi, 'w', encoding='utf-8') as f:
-            json.dump(self.veriler, f, ensure_ascii=False, indent=2)
-    
-    def fis_ekle(self):
-        """Yeni alışveriş fişi ekle"""
-        print("\n" + "="*60)
-        print("YENİ ALIŞ VERİŞ FİŞİ EKLEME")
-        print("="*60)
-        
-        market_adi = input("Market adı: ").strip().title()
-        tarih = input("Tarih (GG.AA.YYYY) [Enter=bugün]: ").strip()
-        
-        if not tarih:
-            tarih = datetime.now().strftime("%d.%m.%Y")
-        
-        print("\nÜrünleri ekleyin (bitirmek için ürün adı yerine 'q' yazın):")
-        
-        urunler = []
-        toplam = 0
-        
-        while True:
-            print(f"\n--- Ürün #{len(urunler) + 1} ---")
-            urun_adi = input("Ürün adı: ").strip()
-            
-            if urun_adi.lower() == 'q':
-                break
-            
-            if not urun_adi:
-                continue
-            
-            try:
-                miktar = float(input("Miktar (adet/kg): "))
-                fiyat = float(input("Fiyat (TL): "))
-                birim = input("Birim (adet/kg/lt) [Enter=adet]: ").strip().lower() or "adet"
-                
-                birim_fiyat = fiyat / miktar if miktar > 0 else fiyat
-                
-                urunler.append({
-                    "ad": urun_adi.title(),
-                    "miktar": miktar,
-                    "birim": birim,
-                    "fiyat": fiyat,
-                    "birim_fiyat": birim_fiyat
-                })
-                
-                toplam += fiyat
-                print(f"✓ Eklendi: {urun_adi} - {miktar} {birim} - {fiyat:.2f} TL (Birim: {birim_fiyat:.2f} TL)")
-                
-            except ValueError:
-                print("❌ Hatalı giriş! Lütfen sayısal değer girin.")
-        
-        if not urunler:
-            print("\n❌ Hiç ürün eklenmedi, fiş kaydedilmedi.")
-            return
-        
-        # Fiş bilgilerini kaydet
-        fis = {
-            "id": len(self.veriler["fisler"]) + 1,
-            "market": market_adi,
-            "tarih": tarih,
-            "urunler": urunler,
-            "toplam": toplam,
-            "kayit_zamani": datetime.now().isoformat()
-        }
-        
-        self.veriler["fisler"].append(fis)
-        
-        # Ürün ve market verilerini güncelle
-        self._urun_verilerini_guncelle(market_adi, tarih, urunler)
-        
-        self.verileri_kaydet()
-        
-        print("\n" + "="*60)
-        print(f"✅ Fiş başarıyla kaydedildi!")
-        print(f"Market: {market_adi}")
-        print(f"Tarih: {tarih}")
-        print(f"Toplam Ürün: {len(urunler)}")
-        print(f"Toplam Tutar: {toplam:.2f} TL")
-        print("="*60)
-    
-    def _urun_verilerini_guncelle(self, market, tarih, urunler):
-        """Ürün ve market istatistiklerini güncelle"""
-        for urun in urunler:
-            urun_adi = urun["ad"]
-            
-            # Ürün veritabanını güncelle
-            if urun_adi not in self.veriler["urunler"]:
-                self.veriler["urunler"][urun_adi] = {}
-            
-            if market not in self.veriler["urunler"][urun_adi]:
-                self.veriler["urunler"][urun_adi][market] = []
-            
-            self.veriler["urunler"][urun_adi][market].append({
-                "tarih": tarih,
-                "fiyat": urun["fiyat"],
-                "birim_fiyat": urun["birim_fiyat"],
-                "miktar": urun["miktar"],
-                "birim": urun["birim"]
-            })
-            
-            # Market veritabanını güncelle
-            if market not in self.veriler["marketler"]:
-                self.veriler["marketler"][market] = {
-                    "toplam_alisveris": 0,
-                    "toplam_harcama": 0,
-                    "urun_sayisi": 0
-                }
-            
-            self.veriler["marketler"][market]["toplam_alisveris"] += 1
-            self.veriler["marketler"][market]["toplam_harcama"] += urun["fiyat"]
-            self.veriler["marketler"][market]["urun_sayisi"] += 1
-    
-    def fiyat_karsilastir(self):
-        """Ürün fiyatlarını marketler arası karşılaştır"""
-        if not self.veriler["urunler"]:
-            print("\n❌ Henüz ürün verisi yok.")
-            return
-        
-        print("\n" + "="*60)
-        print("FİYAT KARŞILAŞTIRMA")
-        print("="*60)
-        
-        # Ürün listesini göster
-        urunler = sorted(self.veriler["urunler"].keys())
-        print("\nKayıtlı Ürünler:")
-        for i, urun in enumerate(urunler, 1):
-            print(f"{i}. {urun}")
-        
+# ÔöÇÔöÇ Sayfa yap─▒land─▒rmas─▒ ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+st.set_page_config(
+    page_title="Market Analiz Sistemi",
+    page_icon="­şøÆ",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+VER─░_DOSYASI = "market_verileri.json"
+
+
+# ÔöÇÔöÇ Veri y├Ânetimi ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+def verileri_yukle():
+    if os.path.exists(VER─░_DOSYASI):
         try:
-            secim = int(input("\nKarşılaştırmak istediğiniz ürünün numarasını girin: "))
-            if secim < 1 or secim > len(urunler):
-                print("❌ Geçersiz seçim!")
-                return
-            
-            urun_adi = urunler[secim - 1]
-            urun_verileri = self.veriler["urunler"][urun_adi]
-            
-            print(f"\n{'='*60}")
-            print(f"ÜRÜN: {urun_adi}")
-            print(f"{'='*60}\n")
-            
+            with open(VER─░_DOSYASI, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {"fisler": [], "urunler": {}, "marketler": {}}
+
+
+def verileri_kaydet(veriler):
+    with open(VER─░_DOSYASI, "w", encoding="utf-8") as f:
+        json.dump(veriler, f, ensure_ascii=False, indent=2)
+
+
+def urun_verilerini_guncelle(veriler, market, tarih, urunler):
+    for urun in urunler:
+        urun_adi = urun["ad"]
+        veriler["urunler"].setdefault(urun_adi, {})
+        veriler["urunler"][urun_adi].setdefault(market, [])
+        veriler["urunler"][urun_adi][market].append({
+            "tarih": tarih,
+            "fiyat": urun["fiyat"],
+            "birim_fiyat": urun["birim_fiyat"],
+            "miktar": urun["miktar"],
+            "birim": urun["birim"],
+        })
+        if market not in veriler["marketler"]:
+            veriler["marketler"][market] = {
+                "toplam_alisveris": 0,
+                "toplam_harcama": 0,
+                "urun_sayisi": 0,
+            }
+        veriler["marketler"][market]["toplam_alisveris"] += 1
+        veriler["marketler"][market]["toplam_harcama"] += urun["fiyat"]
+        veriler["marketler"][market]["urun_sayisi"] += 1
+
+
+# ÔöÇÔöÇ Session state ba┼şlat ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+if "veriler" not in st.session_state:
+    st.session_state.veriler = verileri_yukle()
+
+if "sepet" not in st.session_state:
+    st.session_state.sepet = []
+
+# ÔöÇÔöÇ Kenar ├ğubu─şu ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+with st.sidebar:
+    st.title("­şøÆ Market Analiz")
+    st.markdown("---")
+    sayfa = st.radio(
+        "Men├╝",
+        [
+            "­şÅá Ana Sayfa",
+            "­şôØ Yeni Fi┼ş Ekle",
+            "­şÆ░ Fiyat Kar┼ş─▒la┼şt─▒r",
+            "­şôè Harcama Analizi",
+            "­şôï Fi┼şleri Listele",
+            "­şÆ¥ Verileri D─▒┼şa Aktar",
+        ],
+        label_visibility="collapsed",
+    )
+    st.markdown("---")
+    veriler = st.session_state.veriler
+    st.metric("Toplam Fi┼ş", len(veriler["fisler"]))
+    st.metric("Kay─▒tl─▒ ├£r├╝n", len(veriler["urunler"]))
+    st.metric("Market Say─▒s─▒", len(veriler["marketler"]))
+
+
+# ÔöÇÔöÇ Yard─▒mc─▒ ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+veriler = st.session_state.veriler
+
+
+# =============================================================================
+# ANA SAYFA
+# =============================================================================
+if sayfa == "­şÅá Ana Sayfa":
+    st.title("­şøÆ Market Fiyat Kar┼ş─▒la┼şt─▒rma ve Harcama Analizi")
+    st.subheader("Aileler i├ğin ak─▒ll─▒ market al─▒┼şveri┼ş asistan─▒ ­şÆ░")
+    st.markdown("---")
+
+    if not veriler["fisler"]:
+        st.info("Hen├╝z fi┼ş giri┼şi yap─▒lmad─▒. Sol men├╝den **­şôØ Yeni Fi┼ş Ekle** ile ba┼şlay─▒n!")
+    else:
+        toplam_fis = len(veriler["fisler"])
+        toplam_harcama = sum(f["toplam"] for f in veriler["fisler"])
+        ort_fis = toplam_harcama / toplam_fis
+        toplam_urun = sum(len(f["urunler"]) for f in veriler["fisler"])
+
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("­şôï Toplam Fi┼ş", toplam_fis)
+        col2.metric("­şÆ░ Toplam Harcama", f"{toplam_harcama:,.2f} Ôé║")
+        col3.metric("­şôè Ortalama Fi┼ş", f"{ort_fis:,.2f} Ôé║")
+        col4.metric("­şøÆ Toplam Al─▒m", toplam_urun)
+
+        st.markdown("---")
+
+        # Son 10 fi┼ş grafi─şi
+        st.subheader("­şôê Son Fi┼şler")
+        son_fisler = veriler["fisler"][-10:]
+        df_fisler = pd.DataFrame([
+            {"Fi┼ş": f"#{f['id']} {f['market']}", "Tarih": f["tarih"], "Toplam (Ôé║)": f["toplam"]}
+            for f in son_fisler
+        ])
+        fig = px.bar(df_fisler, x="Fi┼ş", y="Toplam (Ôé║)", color="Toplam (Ôé║)",
+                     color_continuous_scale="Blues", title="Son 10 Al─▒┼şveri┼ş Tutar─▒")
+        st.plotly_chart(fig, use_container_width=True)
+
+        # Market da─ş─▒l─▒m─▒
+        if len(veriler["marketler"]) > 0:
+            st.subheader("­şÅ¬ Markete G├Âre Harcama Da─ş─▒l─▒m─▒")
+            market_harcama = defaultdict(float)
+            for f in veriler["fisler"]:
+                market_harcama[f["market"]] += f["toplam"]
+            df_market = pd.DataFrame(list(market_harcama.items()), columns=["Market", "Harcama (Ôé║)"])
+            fig2 = px.pie(df_market, names="Market", values="Harcama (Ôé║)",
+                          title="Marketlere G├Âre Harcama Pay─▒")
+            st.plotly_chart(fig2, use_container_width=True)
+
+
+# =============================================================================
+# YEN─░ F─░┼Ş EKLE
+# =============================================================================
+elif sayfa == "­şôØ Yeni Fi┼ş Ekle":
+    st.title("­şôØ Yeni Al─▒┼şveri┼ş Fi┼şi Ekle")
+    st.markdown("---")
+
+    col_sol, col_sag = st.columns([1, 1])
+
+    with col_sol:
+        st.subheader("Market Bilgileri")
+        market_adi = st.text_input("Market Ad─▒ *", placeholder="├ûrn: Migros, A101, B─░M...")
+        tarih = st.date_input("Al─▒┼şveri┼ş Tarihi", value=datetime.today())
+        tarih_str = tarih.strftime("%d.%m.%Y")
+
+        st.markdown("---")
+        st.subheader("├£r├╝n Ekle")
+        with st.form("urun_form", clear_on_submit=True):
+            urun_adi = st.text_input("├£r├╝n Ad─▒")
+            col_a, col_b, col_c = st.columns(3)
+            miktar = col_a.number_input("Miktar", min_value=0.01, value=1.0, step=0.1)
+            fiyat = col_b.number_input("Fiyat (Ôé║)", min_value=0.01, value=1.0, step=0.5)
+            birim = col_c.selectbox("Birim", ["adet", "kg", "lt", "gr", "ml"])
+            ekle_btn = st.form_submit_button("ÔŞò Sepete Ekle", use_container_width=True)
+
+            if ekle_btn:
+                if not urun_adi.strip():
+                    st.error("├£r├╝n ad─▒ bo┼ş olamaz!")
+                else:
+                    birim_fiyat = fiyat / miktar if miktar > 0 else fiyat
+                    st.session_state.sepet.append({
+                        "ad": urun_adi.strip().title(),
+                        "miktar": miktar,
+                        "birim": birim,
+                        "fiyat": fiyat,
+                        "birim_fiyat": birim_fiyat,
+                    })
+                    st.success(f"Ô£à {urun_adi.title()} eklendi!")
+
+    with col_sag:
+        st.subheader("­şğ¥ Sepet")
+        if not st.session_state.sepet:
+            st.info("Sepet bo┼ş. Sol taraftan ├╝r├╝n ekleyin.")
+        else:
+            toplam = sum(u["fiyat"] for u in st.session_state.sepet)
+            df_sepet = pd.DataFrame(st.session_state.sepet)[["ad", "miktar", "birim", "fiyat", "birim_fiyat"]]
+            df_sepet.columns = ["├£r├╝n", "Miktar", "Birim", "Fiyat (Ôé║)", "Birim Fiyat (Ôé║)"]
+            st.dataframe(df_sepet, use_container_width=True, hide_index=True)
+
+            st.metric("­şÆ░ Toplam Tutar", f"{toplam:.2f} Ôé║")
+
+            silme_col, kaydet_col = st.columns(2)
+
+            with silme_col:
+                if st.button("­şùæ´©Å Sepeti Temizle", use_container_width=True):
+                    st.session_state.sepet = []
+                    st.rerun()
+
+            with kaydet_col:
+                if st.button("­şÆ¥ Fi┼şi Kaydet", type="primary", use_container_width=True):
+                    if not market_adi.strip():
+                        st.error("L├╝tfen market ad─▒ girin!")
+                    else:
+                        fis = {
+                            "id": len(veriler["fisler"]) + 1,
+                            "market": market_adi.strip().title(),
+                            "tarih": tarih_str,
+                            "urunler": st.session_state.sepet.copy(),
+                            "toplam": toplam,
+                            "kayit_zamani": datetime.now().isoformat(),
+                        }
+                        veriler["fisler"].append(fis)
+                        urun_verilerini_guncelle(
+                            veriler, market_adi.strip().title(),
+                            tarih_str, st.session_state.sepet
+                        )
+                        verileri_kaydet(veriler)
+                        st.session_state.veriler = veriler
+                        st.session_state.sepet = []
+                        st.success(f"Ô£à Fi┼ş #{fis['id']} ba┼şar─▒yla kaydedildi! Toplam: {toplam:.2f} Ôé║")
+                        st.balloons()
+                        st.rerun()
+
+
+# =============================================================================
+# F─░YAT KAR┼ŞILA┼ŞTIR
+# =============================================================================
+elif sayfa == "­şÆ░ Fiyat Kar┼ş─▒la┼şt─▒r":
+    st.title("­şÆ░ Fiyat Kar┼ş─▒la┼şt─▒rma")
+    st.markdown("---")
+
+    if not veriler["urunler"]:
+        st.warning("Hen├╝z ├╝r├╝n verisi yok. ├ûnce fi┼ş ekleyin!")
+    else:
+        urun_listesi = sorted(veriler["urunler"].keys())
+        secilen_urun = st.selectbox("Kar┼ş─▒la┼şt─▒rmak istedi─şiniz ├╝r├╝n├╝ se├ğin:", urun_listesi)
+
+        if secilen_urun:
+            urun_verileri = veriler["urunler"][secilen_urun]
             karsilastirma = []
-            
+
             for market, kayitlar in urun_verileri.items():
                 if kayitlar:
-                    son_kayit = kayitlar[-1]  # En son kayıt
+                    son = kayitlar[-1]
                     ortalama = statistics.mean([k["birim_fiyat"] for k in kayitlar])
-                    
                     karsilastirma.append({
-                        "market": market,
-                        "son_fiyat": son_kayit["birim_fiyat"],
-                        "ortalama": ortalama,
-                        "kayit_sayisi": len(kayitlar),
-                        "son_tarih": son_kayit["tarih"],
-                        "birim": son_kayit["birim"]
+                        "Market": market,
+                        "Son Fiyat (Ôé║)": round(son["birim_fiyat"], 2),
+                        "Ortalama (Ôé║)": round(ortalama, 2),
+                        "Birim": son["birim"],
+                        "Son Tarih": son["tarih"],
+                        "Kay─▒t Say─▒s─▒": len(kayitlar),
                     })
-            
-            # Fiyata göre sırala
-            karsilastirma.sort(key=lambda x: x["son_fiyat"])
-            
-            print(f"{'Market':<20} {'Son Fiyat':<15} {'Ortalama':<15} {'Son Tarih':<15} {'Kayıt'}")
-            print("-" * 80)
-            
-            for i, k in enumerate(karsilastirma, 1):
-                ikon = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else "  "
-                print(f"{ikon} {k['market']:<18} {k['son_fiyat']:.2f} TL/{k['birim']:<5} "
-                      f"{k['ortalama']:.2f} TL/{k['birim']:<5} {k['son_tarih']:<15} {k['kayit_sayisi']}x")
-            
-            # En ucuz ve en pahalı fark
-            if len(karsilastirma) > 1:
-                fark = karsilastirma[-1]["son_fiyat"] - karsilastirma[0]["son_fiyat"]
-                fark_yuzde = (fark / karsilastirma[0]["son_fiyat"]) * 100
-                
-                print("\n" + "-" * 80)
-                print(f"💰 En Ucuz: {karsilastirma[0]['market']} - {karsilastirma[0]['son_fiyat']:.2f} TL")
-                print(f"💸 En Pahalı: {karsilastirma[-1]['market']} - {karsilastirma[-1]['son_fiyat']:.2f} TL")
-                print(f"📊 Fark: {fark:.2f} TL (%{fark_yuzde:.1f})")
-                
-        except (ValueError, IndexError):
-            print("❌ Geçersiz giriş!")
-    
-    def harcama_analizi(self):
-        """Detaylı harcama analizi"""
-        if not self.veriler["fisler"]:
-            print("\n❌ Henüz fiş verisi yok.")
-            return
-        
-        print("\n" + "="*60)
-        print("HARCAMA ANALİZİ")
-        print("="*60)
-        
-        print("\n1. Genel Özet")
-        print("2. Markete Göre Analiz")
-        print("3. Aylık Analiz")
-        print("4. En Çok Alınan Ürünler")
-        
-        try:
-            secim = input("\nSeçiminiz (1-4): ").strip()
-            
-            if secim == "1":
-                self._genel_ozet()
-            elif secim == "2":
-                self._market_analizi()
-            elif secim == "3":
-                self._aylik_analiz()
-            elif secim == "4":
-                self._populer_urunler()
-            else:
-                print("❌ Geçersiz seçim!")
-                
-        except Exception as e:
-            print(f"❌ Hata: {e}")
-    
-    def _genel_ozet(self):
-        """Genel harcama özeti"""
-        toplam_fis = len(self.veriler["fisler"])
-        toplam_harcama = sum(fis["toplam"] for fis in self.veriler["fisler"])
-        ortalama_fis = toplam_harcama / toplam_fis if toplam_fis > 0 else 0
-        
-        toplam_urun = sum(len(fis["urunler"]) for fis in self.veriler["fisler"])
-        
-        print(f"\n{'='*60}")
-        print("GENEL ÖZET")
-        print(f"{'='*60}")
-        print(f"📋 Toplam Fiş Sayısı: {toplam_fis}")
-        print(f"💰 Toplam Harcama: {toplam_harcama:.2f} TL")
-        print(f"📊 Ortalama Fiş Tutarı: {ortalama_fis:.2f} TL")
-        print(f"🛒 Toplam Ürün Alımı: {toplam_urun}")
-        print(f"🏪 Alışveriş Yapılan Market Sayısı: {len(self.veriler['marketler'])}")
-    
-    def _market_analizi(self):
-        """Markete göre harcama analizi"""
-        print(f"\n{'='*60}")
-        print("MARKETE GÖRE HARCAMA ANALİZİ")
-        print(f"{'='*60}\n")
-        
-        market_harcanmalar = defaultdict(float)
-        market_fis_sayisi = defaultdict(int)
-        
-        for fis in self.veriler["fisler"]:
-            market_harcanmalar[fis["market"]] += fis["toplam"]
-            market_fis_sayisi[fis["market"]] += 1
-        
-        # Harcamaya göre sırala
-        sirali = sorted(market_harcanmalar.items(), key=lambda x: x[1], reverse=True)
-        
-        print(f"{'Market':<20} {'Toplam Harcama':<20} {'Fiş Sayısı':<15} {'Ortalama Fiş'}")
-        print("-" * 75)
-        
-        for market, harcama in sirali:
-            fis_sayisi = market_fis_sayisi[market]
-            ortalama = harcama / fis_sayisi
-            print(f"{market:<20} {harcama:>15.2f} TL {fis_sayisi:>13} {ortalama:>15.2f} TL")
-        
-        print("-" * 75)
-        print(f"{'TOPLAM':<20} {sum(market_harcanmalar.values()):>15.2f} TL")
-    
-    def _aylik_analiz(self):
-        """Aylık harcama analizi"""
-        print(f"\n{'='*60}")
-        print("AYLIK HARCAMA ANALİZİ")
-        print(f"{'='*60}\n")
-        
-        aylik_harcama = defaultdict(float)
-        aylik_fis = defaultdict(int)
-        
-        for fis in self.veriler["fisler"]:
-            try:
-                tarih_parcalari = fis["tarih"].split(".")
-                if len(tarih_parcalari) == 3:
-                    ay_yil = f"{tarih_parcalari[1]}.{tarih_parcalari[2]}"
-                    aylik_harcama[ay_yil] += fis["toplam"]
-                    aylik_fis[ay_yil] += 1
-            except:
-                continue
-        
-        sirali = sorted(aylik_harcama.items())
-        
-        print(f"{'Ay/Yıl':<15} {'Harcama':<20} {'Fiş Sayısı':<15} {'Günlük Ort.'}")
-        print("-" * 70)
-        
-        for ay_yil, harcama in sirali:
-            fis_sayisi = aylik_fis[ay_yil]
-            # Basit 30 günlük ortalama
-            gunluk = harcama / 30
-            print(f"{ay_yil:<15} {harcama:>15.2f} TL {fis_sayisi:>13} {gunluk:>15.2f} TL")
-    
-    def _populer_urunler(self):
-        """En çok alınan ürünleri listele"""
-        print(f"\n{'='*60}")
-        print("EN ÇOK ALINAN ÜRÜNLER")
-        print(f"{'='*60}\n")
-        
-        urun_alinma = defaultdict(int)
-        urun_harcama = defaultdict(float)
-        
-        for fis in self.veriler["fisler"]:
+
+            karsilastirma.sort(key=lambda x: x["Son Fiyat (Ôé║)"])
+
+            st.subheader(f"­şöı **{secilen_urun}** - Marketler Aras─▒ Kar┼ş─▒la┼şt─▒rma")
+
+            if len(karsilastirma) >= 1:
+                en_ucuz = karsilastirma[0]
+                en_pahali = karsilastirma[-1]
+
+                c1, c2, c3 = st.columns(3)
+                c1.metric("­şÑç En Ucuz", f"{en_ucuz['Market']}", f"{en_ucuz['Son Fiyat (Ôé║)']:.2f} Ôé║")
+                c2.metric("­şÆ© En Pahal─▒", f"{en_pahali['Market']}", f"{en_pahali['Son Fiyat (Ôé║)']:.2f} Ôé║")
+                if len(karsilastirma) > 1:
+                    fark = en_pahali["Son Fiyat (Ôé║)"] - en_ucuz["Son Fiyat (Ôé║)"]
+                    fark_yuzde = (fark / en_ucuz["Son Fiyat (Ôé║)"]) * 100
+                    c3.metric("­şôè Fiyat Fark─▒", f"{fark:.2f} Ôé║", f"%{fark_yuzde:.1f}")
+
+                st.markdown("---")
+
+                df_kars = pd.DataFrame(karsilastirma)
+                st.dataframe(df_kars, use_container_width=True, hide_index=True)
+
+                st.markdown("---")
+                fig = px.bar(
+                    df_kars,
+                    x="Market",
+                    y="Son Fiyat (Ôé║)",
+                    color="Market",
+                    title=f"{secilen_urun} - Market Fiyat Kar┼ş─▒la┼şt─▒rmas─▒",
+                    text="Son Fiyat (Ôé║)",
+                    labels={"Son Fiyat (Ôé║)": "Son Fiyat (Ôé║)"},
+                )
+                fig.update_traces(texttemplate="%{text:.2f} Ôé║", textposition="outside")
+                st.plotly_chart(fig, use_container_width=True)
+
+                # Tarihsel fiyat trendi
+                st.subheader("­şôê Fiyat Trendi")
+                trend_data = []
+                for market, kayitlar in urun_verileri.items():
+                    for k in kayitlar:
+                        trend_data.append({
+                            "Tarih": k["tarih"],
+                            "Birim Fiyat (Ôé║)": k["birim_fiyat"],
+                            "Market": market,
+                        })
+                if trend_data:
+                    df_trend = pd.DataFrame(trend_data)
+                    fig2 = px.line(
+                        df_trend,
+                        x="Tarih",
+                        y="Birim Fiyat (Ôé║)",
+                        color="Market",
+                        markers=True,
+                        title=f"{secilen_urun} - Tarihe G├Âre Birim Fiyat De─şi┼şimi",
+                    )
+                    st.plotly_chart(fig2, use_container_width=True)
+
+
+# =============================================================================
+# HARCAMA ANAL─░Z─░
+# =============================================================================
+elif sayfa == "­şôè Harcama Analizi":
+    st.title("­şôè Harcama Analizi")
+    st.markdown("---")
+
+    if not veriler["fisler"]:
+        st.warning("Hen├╝z fi┼ş verisi yok. ├ûnce fi┼ş ekleyin!")
+    else:
+        tab1, tab2, tab3, tab4 = st.tabs([
+            "­şôï Genel ├ûzet",
+            "­şÅ¬ Markete G├Âre",
+            "­şôà Ayl─▒k Analiz",
+            "­şöÑ Pop├╝ler ├£r├╝nler",
+        ])
+
+        # --- Genel ├ûzet ---
+        with tab1:
+            toplam_fis = len(veriler["fisler"])
+            toplam_harcama = sum(f["toplam"] for f in veriler["fisler"])
+            ort_fis = toplam_harcama / toplam_fis
+            toplam_urun = sum(len(f["urunler"]) for f in veriler["fisler"])
+
+            c1, c2, c3, c4, c5 = st.columns(5)
+            c1.metric("­şôï Fi┼ş Say─▒s─▒", toplam_fis)
+            c2.metric("­şÆ░ Toplam Harcama", f"{toplam_harcama:,.2f} Ôé║")
+            c3.metric("­şôè Ortalama Fi┼ş", f"{ort_fis:,.2f} Ôé║")
+            c4.metric("­şøÆ Toplam Al─▒m", toplam_urun)
+            c5.metric("­şÅ¬ Market Say─▒s─▒", len(veriler["marketler"]))
+
+            st.markdown("---")
+
+            df_all = pd.DataFrame([
+                {
+                    "Fi┼ş": f"#{f['id']}",
+                    "Market": f["market"],
+                    "Tarih": f["tarih"],
+                    "├£r├╝n Say─▒s─▒": len(f["urunler"]),
+                    "Toplam (Ôé║)": f["toplam"],
+                }
+                for f in veriler["fisler"]
+            ])
+            st.dataframe(df_all.sort_values("Fi┼ş", ascending=False).reset_index(drop=True),
+                         use_container_width=True, hide_index=True)
+
+        # --- Markete G├Âre ---
+        with tab2:
+            market_harcama = defaultdict(float)
+            market_fis = defaultdict(int)
+            for f in veriler["fisler"]:
+                market_harcama[f["market"]] += f["toplam"]
+                market_fis[f["market"]] += 1
+
+            rows = []
+            for market, harcama in sorted(market_harcama.items(), key=lambda x: x[1], reverse=True):
+                rows.append({
+                    "Market": market,
+                    "Toplam Harcama (Ôé║)": round(harcama, 2),
+                    "Fi┼ş Say─▒s─▒": market_fis[market],
+                    "Ortalama Fi┼ş (Ôé║)": round(harcama / market_fis[market], 2),
+                })
+            df_market = pd.DataFrame(rows)
+            st.dataframe(df_market, use_container_width=True, hide_index=True)
+
+            col1, col2 = st.columns(2)
+            with col1:
+                fig = px.bar(df_market, x="Market", y="Toplam Harcama (Ôé║)",
+                             color="Market", title="Markete G├Âre Toplam Harcama")
+                st.plotly_chart(fig, use_container_width=True)
+            with col2:
+                fig2 = px.pie(df_market, names="Market", values="Toplam Harcama (Ôé║)",
+                              title="Harcama Pay─▒")
+                st.plotly_chart(fig2, use_container_width=True)
+
+        # --- Ayl─▒k Analiz ---
+        with tab3:
+            aylik_harcama = defaultdict(float)
+            aylik_fis = defaultdict(int)
+            for f in veriler["fisler"]:
+                try:
+                    parcalar = f["tarih"].split(".")
+                    if len(parcalar) == 3:
+                        ay_yil = f"{parcalar[1]}.{parcalar[2]}"
+                        aylik_harcama[ay_yil] += f["toplam"]
+                        aylik_fis[ay_yil] += 1
+                except Exception:
+                    continue
+
+            rows_ay = []
+            for ay_yil, harcama in sorted(aylik_harcama.items()):
+                rows_ay.append({
+                    "Ay/Y─▒l": ay_yil,
+                    "Harcama (Ôé║)": round(harcama, 2),
+                    "Fi┼ş Say─▒s─▒": aylik_fis[ay_yil],
+                    "G├╝nl├╝k Ort. (Ôé║)": round(harcama / 30, 2),
+                })
+            df_ay = pd.DataFrame(rows_ay)
+            st.dataframe(df_ay, use_container_width=True, hide_index=True)
+
+            if not df_ay.empty:
+                fig = px.line(df_ay, x="Ay/Y─▒l", y="Harcama (Ôé║)",
+                              markers=True, title="Ayl─▒k Harcama Trendi")
+                st.plotly_chart(fig, use_container_width=True)
+
+        # --- Pop├╝ler ├£r├╝nler ---
+        with tab4:
+            urun_alinma = defaultdict(int)
+            urun_harcama = defaultdict(float)
+            for f in veriler["fisler"]:
+                for u in f["urunler"]:
+                    urun_alinma[u["ad"]] += 1
+                    urun_harcama[u["ad"]] += u["fiyat"]
+
+            sirali = sorted(urun_alinma.items(), key=lambda x: x[1], reverse=True)[:20]
+            rows_urun = [
+                {
+                    "#": i + 1,
+                    "├£r├╝n": urun,
+                    "Al─▒m Say─▒s─▒": alinma,
+                    "Toplam Harcama (Ôé║)": round(urun_harcama[urun], 2),
+                }
+                for i, (urun, alinma) in enumerate(sirali)
+            ]
+            df_pop = pd.DataFrame(rows_urun)
+            st.dataframe(df_pop, use_container_width=True, hide_index=True)
+
+            if not df_pop.empty:
+                fig = px.bar(df_pop.head(10), x="├£r├╝n", y="Al─▒m Say─▒s─▒",
+                             color="Al─▒m Say─▒s─▒", title="En ├çok Al─▒nan 10 ├£r├╝n",
+                             color_continuous_scale="Greens")
+                st.plotly_chart(fig, use_container_width=True)
+
+
+# =============================================================================
+# F─░┼ŞLER─░ L─░STELE
+# =============================================================================
+elif sayfa == "­şôï Fi┼şleri Listele":
+    st.title("­şôï T├╝m Fi┼şler")
+    st.markdown("---")
+
+    if not veriler["fisler"]:
+        st.warning("Hen├╝z fi┼ş yok.")
+    else:
+        col_filtre, col_bos = st.columns([1, 2])
+        with col_filtre:
+            market_filtre = st.selectbox(
+                "Markete G├Âre Filtre",
+                ["T├╝m├╝"] + sorted({f["market"] for f in veriler["fisler"]}),
+            )
+
+        fisler_goster = veriler["fisler"]
+        if market_filtre != "T├╝m├╝":
+            fisler_goster = [f for f in fisler_goster if f["market"] == market_filtre]
+
+        fisler_goster = list(reversed(fisler_goster))
+
+        for fis in fisler_goster:
+            with st.expander(
+                f"­şğ¥ Fi┼ş #{fis['id']} ÔÇö {fis['market']} ÔÇö {fis['tarih']} ÔÇö **{fis['toplam']:.2f} Ôé║**"
+            ):
+                df_fis = pd.DataFrame(fis["urunler"])[["ad", "miktar", "birim", "fiyat", "birim_fiyat"]]
+                df_fis.columns = ["├£r├╝n", "Miktar", "Birim", "Fiyat (Ôé║)", "Birim Fiyat (Ôé║)"]
+                st.dataframe(df_fis, use_container_width=True, hide_index=True)
+                st.caption(f"Kay─▒t zaman─▒: {fis.get('kayit_zamani', '-')}")
+
+
+# =============================================================================
+# VER─░LER─░ DI┼ŞA AKTAR
+# =============================================================================
+elif sayfa == "­şÆ¥ Verileri D─▒┼şa Aktar":
+    st.title("­şÆ¥ Verileri D─▒┼şa Aktar")
+    st.markdown("---")
+
+    if not veriler["fisler"]:
+        st.warning("D─▒┼şa aktar─▒lacak veri yok.")
+    else:
+        rows_csv = []
+        for fis in veriler["fisler"]:
             for urun in fis["urunler"]:
-                urun_alinma[urun["ad"]] += 1
-                urun_harcama[urun["ad"]] += urun["fiyat"]
-        
-        # Alınma sayısına göre sırala
-        sirali = sorted(urun_alinma.items(), key=lambda x: x[1], reverse=True)[:20]
-        
-        print(f"{'#':<5} {'Ürün':<30} {'Alım Sayısı':<15} {'Toplam Harcama'}")
-        print("-" * 75)
-        
-        for i, (urun, alinma) in enumerate(sirali, 1):
-            harcama = urun_harcama[urun]
-            print(f"{i:<5} {urun:<30} {alinma:>12} {harcama:>18.2f} TL")
-    
-    def fisler_listele(self):
-        """Tüm fişleri listele"""
-        if not self.veriler["fisler"]:
-            print("\n❌ Henüz fiş yok.")
-            return
-        
-        print("\n" + "="*60)
-        print("TÜM FİŞLER")
-        print("="*60 + "\n")
-        
-        for fis in reversed(self.veriler["fisler"][-20:]):  # Son 20 fiş
-            print(f"Fiş #{fis['id']} - {fis['market']} - {fis['tarih']}")
-            print(f"Toplam: {fis['toplam']:.2f} TL - Ürün Sayısı: {len(fis['urunler'])}")
-            print("-" * 60)
-    
-    def veri_disa_aktar(self):
-        """Verileri CSV formatında dışa aktar"""
-        if not self.veriler["fisler"]:
-            print("\n❌ Dışa aktarılacak veri yok.")
-            return
-        
+                rows_csv.append({
+                    "Fi┼ş ID": fis["id"],
+                    "Market": fis["market"],
+                    "Tarih": fis["tarih"],
+                    "├£r├╝n": urun["ad"],
+                    "Miktar": urun["miktar"],
+                    "Birim": urun["birim"],
+                    "Fiyat (Ôé║)": urun["fiyat"],
+                    "Birim Fiyat (Ôé║)": urun["birim_fiyat"],
+                })
+        df_export = pd.DataFrame(rows_csv)
+        st.dataframe(df_export, use_container_width=True, hide_index=True)
+
+        csv_data = df_export.to_csv(index=False, encoding="utf-8-sig")
         dosya_adi = f"market_rapor_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-        
-        with open(dosya_adi, 'w', encoding='utf-8') as f:
-            f.write("Fiş ID,Market,Tarih,Ürün,Miktar,Birim,Fiyat,Birim Fiyat\n")
-            
-            for fis in self.veriler["fisler"]:
-                for urun in fis["urunler"]:
-                    f.write(f"{fis['id']},{fis['market']},{fis['tarih']},"
-                           f"{urun['ad']},{urun['miktar']},{urun['birim']},"
-                           f"{urun['fiyat']:.2f},{urun['birim_fiyat']:.2f}\n")
-        
-        print(f"\n✅ Veriler başarıyla dışa aktarıldı: {dosya_adi}")
 
+        st.download_button(
+            label="­şôÑ CSV Olarak ─░ndir",
+            data=csv_data,
+            file_name=dosya_adi,
+            mime="text/csv",
+            type="primary",
+            use_container_width=True,
+        )
 
-def ana_menu():
-    """Ana menü"""
-    analiz = MarketAnaliz()
-    
-    while True:
-        print("\n" + "="*60)
-        print(" " * 15 + "MARKET ANALİZ SİSTEMİ")
-        print("="*60)
-        print("\n1. 📝 Yeni Fiş Ekle")
-        print("2. 💰 Fiyat Karşılaştır")
-        print("3. 📊 Harcama Analizi")
-        print("4. 📋 Fişleri Listele")
-        print("5. 💾 Verileri Dışa Aktar (CSV)")
-        print("6. ❌ Çıkış")
-        
-        secim = input("\nSeçiminiz (1-6): ").strip()
-        
-        if secim == "1":
-            analiz.fis_ekle()
-        elif secim == "2":
-            analiz.fiyat_karsilastir()
-        elif secim == "3":
-            analiz.harcama_analizi()
-        elif secim == "4":
-            analiz.fisler_listele()
-        elif secim == "5":
-            analiz.veri_disa_aktar()
-        elif secim == "6":
-            print("\n👋 Programdan çıkılıyor...")
-            break
-        else:
-            print("\n❌ Geçersiz seçim! Lütfen 1-6 arası bir sayı girin.")
-
-
-if __name__ == "__main__":
-    print("\n" + "="*60)
-    print(" " * 10 + "MARKET FİYAT KARŞILAŞTIRMA VE")
-    print(" " * 12 + "HARCAMA ANALİZİ SİSTEMİ")
-    print("="*60)
-    print("\nAileler için kapsamlı market alışverişi yönetim programı")
-    print("Fişlerinizi ekleyin, fiyatları karşılaştırın, tasarruf edin!")
-    
-    input("\nDevam etmek için Enter'a basın...")
-    
-    try:
-        ana_menu()
-    except KeyboardInterrupt:
-        print("\n\n👋 Program sonlandırıldı.")
-    except Exception as e:
-        print(f"\n❌ Beklenmeyen hata: {e}")
+        st.markdown("---")
+        json_data = json.dumps(veriler, ensure_ascii=False, indent=2)
+        st.download_button(
+            label="­şôÑ JSON Olarak ─░ndir (T├╝m Veri)",
+            data=json_data,
+            file_name="market_verileri.json",
+            mime="application/json",
+            use_container_width=True,
+        )
