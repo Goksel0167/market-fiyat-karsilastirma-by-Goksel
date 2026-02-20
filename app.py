@@ -39,9 +39,16 @@ def verileri_yukle():
             pass
     return {"fisler": [], "urunler": {}, "marketler": {}}
 
+DEPOLAMA_SINIRI_MB = 48  # 50MB limitin 2MB altında uyar
+
 def verileri_kaydet(v):
     with open(VERI_DOSYASI, "w", encoding="utf-8") as f:
         json.dump(v, f, ensure_ascii=False, indent=2)
+
+def dosya_boyutu_mb():
+    if os.path.exists(VERI_DOSYASI):
+        return os.path.getsize(VERI_DOSYASI) / (1024 * 1024)
+    return 0.0
 
 def urun_guncelle(veriler, market, tarih, urunler):
     for u in urunler:
@@ -69,6 +76,8 @@ if "veriler" not in st.session_state:
     st.session_state.veriler = verileri_yukle()
 if "sepet" not in st.session_state:
     st.session_state.sepet = []
+if "depolama_onay" not in st.session_state:
+    st.session_state.depolama_onay = False
 
 with st.sidebar:
     st.title("\U0001f6d2 Market Analiz")
@@ -103,8 +112,34 @@ with st.sidebar:
     st.metric("Toplam Fis", len(v["fisler"]))
     st.metric("Kayitli Urun", len(v["urunler"]))
     st.metric("Market Sayisi", len(v["marketler"]))
+    # Depolama gostergesi
+    boyut = dosya_boyutu_mb()
+    oran = min(boyut / DEPOLAMA_SINIRI_MB, 1.0)
+    if boyut > 0:
+        st.markdown("---")
+        if oran >= 1.0:
+            renk = "\U0001f534"  # kirmizi
+        elif oran >= 0.75:
+            renk = "\U0001f7e1"  # sari
+        else:
+            renk = "\U0001f7e2"  # yesil
+        st.caption(f"{renk} Depolama: {boyut:.1f} / {DEPOLAMA_SINIRI_MB} MB")
+        st.progress(oran)
 
 veriler = st.session_state.veriler
+
+# Depolama dolmak uzere ise uyari banneri
+boyut_su_an = dosya_boyutu_mb()
+if boyut_su_an >= DEPOLAMA_SINIRI_MB:
+    st.error(
+        f"\u26a0\ufe0f **Depolama doldu!** ({boyut_su_an:.1f} MB / {DEPOLAMA_SINIRI_MB} MB)  \n"
+        "Yeni fis ekleyemezsiniz. Asagidan eski fisleri temizleyin."
+    )
+elif boyut_su_an >= DEPOLAMA_SINIRI_MB * 0.8:
+    st.warning(
+        f"\u26a0\ufe0f Depolama **%{int((boyut_su_an/DEPOLAMA_SINIRI_MB)*100)} dolu** "
+        f"({boyut_su_an:.1f} MB). Yakinda yer kalmayor."
+    )
 
 # ─── ANA SAYFA ────────────────────────────────────────────────────────────────
 if sayfa == "\U0001f3e0 Ana Sayfa":
@@ -341,33 +376,76 @@ elif sayfa == "\U0001f4cb Fisleri Listele":
 # ─── FİŞ SİL ─────────────────────────────────────────────────────────────────
 elif sayfa == "\U0001f5d1\ufe0f Fis Sil":
     st.title("\U0001f5d1\ufe0f Fis Sil")
+    st.info("ℹ\ufe0f Kayitlar kalicidir. Silme islemi **geri alinamaz**. Lutfen dikkatli olun.")
     st.markdown("---")
     if not veriler["fisler"]:
         st.warning("Henuz fis yok.")
     else:
-        st.info(f"Toplam {len(veriler['fisler'])} fis kayitli.")
-        # Tablo olarak listele
+        # --- Manuel tek fis silme (cift onay) ---
+        st.subheader("Tek Fis Sil")
         df_liste = pd.DataFrame([{
-            "ID": f["id"],
-            "Market": f["market"],
-            "Tarih": f["tarih"],
-            "Urun Sayisi": len(f["urunler"]),
-            "Toplam (TL)": f["toplam"]
+            "ID": f["id"], "Market": f["market"], "Tarih": f["tarih"],
+            "Urun Sayisi": len(f["urunler"]), "Toplam (TL)": f["toplam"]
         } for f in reversed(veriler["fisler"])]).reset_index(drop=True)
         st.dataframe(df_liste, use_container_width=True, hide_index=True)
         st.markdown("---")
-        st.subheader("Fis Sec ve Sil")
         fis_secenekleri = {
             f"#{f['id']} - {f['market']} - {f['tarih']} - {f['toplam']:.2f} TL": f["id"]
             for f in reversed(veriler["fisler"])
         }
         secilen_label = st.selectbox("Silmek istediginiz fisi secin:", list(fis_secenekleri.keys()))
         secilen_id = fis_secenekleri[secilen_label]
-        st.warning(f"**{secilen_label}** silinecek. Bu islem geri alinamaz!")
-        if st.button("\U0001f5d1\ufe0f Fisi Kalici Olarak Sil", type="primary", use_container_width=True):
+        st.warning(f"\u26a0\ufe0f **{secilen_label}** silinecek.")
+        # Adim 1: onay kutusu
+        onay = st.checkbox("Bu fisi silmek istedigimi anliyorum, islem geri alinamaz.",
+                           key="tek_sil_onay")
+        # Adim 2: sil butonu (sadece onay verildiyse aktif)
+        if st.button("\U0001f5d1\ufe0f Onayli Olarak Sil", type="primary",
+                     use_container_width=True, disabled=not onay):
             st.session_state.veriler = fis_sil(veriler, secilen_id)
-            st.success("Fis basariyla silindi!")
+            st.success("Fis silindi.")
             st.rerun()
+
+        # --- Depolama doluysa eski fisleri temizle ---
+        boyut_fis = dosya_boyutu_mb()
+        if boyut_fis >= DEPOLAMA_SINIRI_MB * 0.75:
+            st.markdown("---")
+            st.subheader("\U0001f4be Depolama Yonetimi")
+            st.warning(
+                f"Depolama {boyut_fis:.1f} MB dolu. "
+                "En eski fislerden silmek ister misiniz?"
+            )
+            kacar = st.slider(
+                "Kac eski fis silinsin? (en eskiden baslar)",
+                min_value=1, max_value=min(len(veriler["fisler"]), 50), value=5
+            )
+            eski_fisler = veriler["fisler"][:kacar]
+            st.markdown("Silinecek fisler:")
+            for ef in eski_fisler:
+                st.markdown(
+                    f"- **#{ef['id']}** {ef['market']} / {ef['tarih']} / "
+                    f"{ef['toplam']:.2f} TL"
+                )
+            toplu_onay = st.checkbox(
+                f"Yukaridaki {kacar} eski fisi silmeyi onayliyorum.",
+                key="toplu_sil_onay"
+            )
+            if st.button("\U0001f5d1\ufe0f Eski Fisleri Sil", type="primary",
+                         use_container_width=True, disabled=not toplu_onay):
+                sil_idler = {f["id"] for f in eski_fisler}
+                veriler["fisler"] = [f for f in veriler["fisler"] if f["id"] not in sil_idler]
+                veriler["urunler"] = {}
+                veriler["marketler"] = {}
+                for f in veriler["fisler"]:
+                    urun_guncelle(veriler, f["market"], f["tarih"], f["urunler"])
+                verileri_kaydet(veriler)
+                st.session_state.veriler = veriler
+                yeni_boyut = dosya_boyutu_mb()
+                st.success(
+                    f"{kacar} eski fis silindi. "
+                    f"Yeni depolama: {yeni_boyut:.1f} MB"
+                )
+                st.rerun()
 
 # ─── VERİLERİ DIŞA AKTAR ─────────────────────────────────────────────────────
 elif sayfa == "\U0001f4be Verileri Disa Aktar":
